@@ -5,7 +5,7 @@
  * lwp_create() returns the (lightweight) thread id of the new thread
  * ir −1 if the thread cannot be created.
  */
-tid_t lwp_create(function,argument,stacksize) {
+tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
 
 }
 
@@ -60,14 +60,14 @@ void lwp_stop() {
  * the new one in next() order. If scheduler is NULL, or has never
  * been set, the scheduler should do round-robin scheduling.
  */
-void lwp_set_scheduler(scheduler) {
+void lwp_set_scheduler(scheduler fun) {
 
 }
 
 /*
  * Returns the pointer to the current scheduler.
  */
-scheduler lwp_get_scheduler(void) {
+scheduler lwp_get_scheduler() {
 
 }
 
@@ -76,6 +76,6 @@ scheduler lwp_get_scheduler(void) {
  * if the ID is invalid
  */
 
-thread tid2thread(tid) {
+thread tid2thread(tid_t tid) {
 
 }
