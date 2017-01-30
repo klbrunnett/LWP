@@ -1,3 +1,11 @@
+#include "lwp.h"
+
+int main() {
+
+}
+
+static tid_t tidCounter = 1;
+
 /*
  * Creates a new lightweight process which executes the given function
  * with the given argument. The new processes’s stack will be
@@ -6,23 +14,18 @@
  * ir −1 if the thread cannot be created.
  */
 tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
-
+	thread *myThread = malloc(sizeof(thread) + stacksize);
+	myThread->tid = tidCounter++;
+	myThread->stacksize = stacksize;
+	myThread->stack = myThread + 1;
+	//function(argument);
 }
 
 /*
  * Returns the tid of the calling LWP or NO THREAD if not called by a
  * LWP.
  */
-void lwp_gettid() {
-
-}
-
-/*
- * Yields control to another LWP. Which one depends on the scheduler.
- * Saves the current LWP’s context, picks the next one, restores
- * that thread’s context, and returns.
- */
-tid_t lwp_exit() {
+tid_t lwp_gettid() {
 
 }
 
@@ -30,6 +33,15 @@ tid_t lwp_exit() {
  * Terminates the current LWP and frees its resources. Calls
  * sched->next() to get the next thread. If there are no other
  * threads, restores the original system thread.
+ */
+void lwp_exit() {
+
+}
+
+/*
+ * Yields control to another LWP. Which one depends on the scheduler.
+ * Saves the current LWP’s context, picks the next one, restores
+ * that thread’s context, and returns.
  */
 void lwp_yield() {
 
