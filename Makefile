@@ -58,3 +58,8 @@ numbermain.o: lwp.h
 pub:
 	scp $(PUBFILES) $(TARGET)
 
+liblwp.so:	lwp.o
+	$(CC) $(CFLAGS) -shared -o $@ lwp.o
+
+lwp.o: lwp.c lwp.h
+	$(CC) $(CFLAGS) -c -o lwp.o lwp.c
