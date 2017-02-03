@@ -13,12 +13,19 @@ int main() {
 // 	printf("%lu\n", regs->r14);
 }
 
+// void rr_admit(context *newContext);
+// void rr_remove(context *victim);
+context *rr_next();
+
 static tid_t tidCounter = 1;
 static context *head = NULL;
 static context *prev = NULL;
 static context *current = NULL;
-static scheduler schedulerState = NULL;
+static struct scheduler rr_publish = {NULL, NULL, NULL, NULL, rr_next};
+static scheduler schedulerState = &rr_publish;
 static rfile *originalRegs = NULL;
+
+static context *rrHead = NULL;
 /*
  * Creates a new lightweight process which executes the given function
  * with the given argument. The new processes’s stack will be
@@ -38,18 +45,16 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
 	*(myThread->stack) = (unsigned long) lwp_exit;
 	*(myThread->stack + 1) = (unsigned long) function;
 
-	myThread->lib_one = prev;
-	myThread->lib_two = NULL;
+	myThread->lib_one = myThread->sched_one = prev;
+	myThread->lib_two = myThread->sched_two = NULL;
 
 	if (!prev) {
-		prev->lib_two = myThread;
+		prev->lib_two = prev->sched_two = myThread;
 	}
 
 	prev = myThread;
 
-	if (schedulerState) {
-		schedulerState->admit(myThread);
-	}
+	schedulerState->admit(myThread);
 
 	myThread->state.rdi = *(unsigned long *) argument;
 	myThread->state.rbp = (unsigned long) myThread->stack - 1;
@@ -83,15 +88,7 @@ void lwp_exit() {
 void lwp_yield() {
 	context *threadToStart;
 
-	if(!schedulerState) {
-		threadToStart = current->lib_two;
-		if (!threadToStart) {
-			threadToStart = head;
-		}
-	}
-	else {
-		threadToStart = schedulerState->next();
-	}
+	threadToStart = schedulerState->next();
 
 	save_context(&current->state);
 	current = threadToStart;
@@ -109,17 +106,7 @@ void lwp_start() {
 		return;
 	}
 	context *threadToStart;
-	if (!schedulerState) {
-		if (!current) {
-			threadToStart = head;
-		}
-		else {
-			threadToStart = current;
-		}
-	}
-	else {
-		threadToStart = schedulerState->next();
-	}
+	threadToStart = schedulerState->next();
 
 	save_context(originalRegs);
 	load_context(&threadToStart->state);
@@ -153,21 +140,13 @@ void lwp_set_scheduler(scheduler fun) {
 	context *curr;
 	fun->init();
 
-	if (!schedulerState) {
-		while (!(curr = schedulerState->next())) {
-			schedulerState->remove(curr);
-			fun->admit(curr);
-		}
-		schedulerState->shutdown();
+	while (!(curr = schedulerState->next())) {
+		schedulerState->remove(curr);
+		fun->admit(curr);
 	}
+	schedulerState->shutdown();
 
 	schedulerState = fun;
-
-	curr = head;
-	while(!curr) {
-		schedulerState->admit(curr);
-		curr = curr->lib_two;
-	}
 }
 
 /*
@@ -190,4 +169,44 @@ thread tid2thread(tid_t tid) {
 		}
 	}
 	return NULL;
+}
+
+
+void rr_admit(context *newContext) {
+   context *curr = rrHead;
+   while (curr && curr->sched_two) {
+      curr = curr->sched_two;
+   }
+
+   if (curr) {
+      curr->sched_two = newContext;
+   }
+   else {
+      rrHead = newContext;
+   }
+}
+
+void rr_remove(context *victim) {
+   context *toRemove = rrHead;
+   context *prev = NULL;
+   while (toRemove && toRemove != victim) {
+      prev = toRemove;
+      toRemove = toRemove->sched_two;
+   }
+
+   if (prev && toRemove) {
+      prev->sched_two = toRemove->sched_two;
+      if (toRemove->sched_two) {
+         toRemove->sched_two->sched_one = prev;
+      }
+   }
+}
+
+context *rr_next() {
+   context *toReturn = rrHead;
+   if (rrHead) {
+      rr_admit(toReturn);
+      rrHead = rrHead->sched_two;
+   }
+   return toReturn;
 }
