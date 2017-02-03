@@ -2,19 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int main() {
-// 	rfile *regs = malloc(sizeof(rfile));
-// 	save_context(regs);
-// 	regs->r14 = 1;
-// 	load_context(regs);
-
-// 	// swap_rfiles(NULL, regs);
-
-// 	printf("%lu\n", regs->r14);
-}
-
-// void rr_admit(context *newContext);
-// void rr_remove(context *victim);
 context *rr_next();
 
 static tid_t tidCounter = 1;
@@ -34,6 +21,7 @@ static context *rrHead = NULL;
  * ir −1 if the thread cannot be created.
  */
 tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
+   printf("lwp_create\n");
 	context *myThread = malloc(sizeof(context) + stacksize + 2 * sizeof(unsigned long));
 	if (!head) {
 		head = myThread;

@@ -35,14 +35,14 @@ allclean: clean
 clean:	
 	rm -f $(OBJS) *~ TAGS
 
-snakes: snakemain.o libPLN.a libsnakes.a
-	$(LD) $(LDFLAGS) -o snakes snakemain.o -L. -lncurses -lsnakes -lPLN
+snakes: snakemain.o liblwp.a libsnakes.a
+	$(LD) $(LDFLAGS) -o snakes snakemain.o -L. -lncurses -lsnakes -llwp magic64.S
 
-hungry: hungrymain.o libPLN.a libsnakes.a
-	$(LD) $(LDFLAGS) -o hungry hungrymain.o -L. -lncurses -lsnakes -lPLN
+hungry: hungrymain.o liblwp.a libsnakes.a
+	$(LD) $(LDFLAGS) -o hungry hungrymain.o -L. -lncurses -lsnakes -llwp magic64.S
 
-nums: numbersmain.o libPLN.a 
-	$(LD) $(LDFLAGS) -o nums numbersmain.o -L. -lPLN
+nums: numbersmain.o liblwp.a 
+	$(LD) $(LDFLAGS) -o nums numbersmain.o -L. -llwp magic64.S
 
 hungrymain.o: lwp.h snakes.h
 
@@ -50,10 +50,10 @@ snakemain.o: lwp.h snakes.h
 
 numbermain.o: lwp.h
 
-#libPLN.a: ../Publish/lwp.c
-#	gcc -c ../Publish/lwp.c
-#	ar r libPLN.a lwp.o
-#	rm lwp.o
+liblwp.a: lwp.c
+	gcc -c lwp.c
+	ar r liblwp.a lwp.o
+	rm lwp.o
 
 pub:
 	scp $(PUBFILES) $(TARGET)
@@ -62,4 +62,4 @@ liblwp.so:	lwp.o
 	$(CC) $(CFLAGS) -shared -o $@ lwp.o
 
 lwp.o: lwp.c lwp.h
-	$(CC) $(CFLAGS) -c -o lwp.o lwp.c
+	$(CC) $(CFLAGS) -c -o lwp.o lwp.c magic64.S
