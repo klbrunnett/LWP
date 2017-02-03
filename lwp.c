@@ -2,13 +2,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+void rr_remove(context *victim);
+void rr_admit(context *newContext);
 context *rr_next();
 
 static tid_t tidCounter = 1;
 static context *head = NULL;
 static context *prev = NULL;
 static context *current = NULL;
-static struct scheduler rr_publish = {NULL, NULL, NULL, NULL, rr_next};
+static struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next};
 static scheduler schedulerState = &rr_publish;
 static rfile *originalRegs = NULL;
 
@@ -30,24 +32,34 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
 	myThread->stacksize = stacksize;
 	myThread->stack = (unsigned long*)(myThread + 1);
 
-	*(myThread->stack) = (unsigned long) lwp_exit;
-	*(myThread->stack + 1) = (unsigned long) function;
+   *(myThread->stack) = (unsigned long) lwp_exit;
+   *(myThread->stack + 1) = (unsigned long) function;
 
-	myThread->lib_one = myThread->sched_one = prev;
-	myThread->lib_two = myThread->sched_two = NULL;
+   myThread->lib_one = myThread->sched_one = prev;
+   myThread->lib_two = myThread->sched_two = NULL;
 
-	if (!prev) {
-		prev->lib_two = prev->sched_two = myThread;
-	}
+   if (prev) {
+      printf("prev:%p\n", prev);
+      printf("myThread:%p\n", myThread);
+      prev->lib_two = prev->sched_two = myThread;
+   }
 
-	prev = myThread;
+   prev = myThread;
 
-	schedulerState->admit(myThread);
+   schedulerState->admit(myThread);
 
-	myThread->state.rdi = *(unsigned long *) argument;
+   myThread->state.rdi = (unsigned long) argument;
 	myThread->state.rbp = (unsigned long) myThread->stack - 1;
 	myThread->state.rsp = (unsigned long) myThread->stack + 1;
 
+   context *myCon = head;
+   int max = 5;
+   while(myCon && max--) {
+      printf("mycon: %p\n");
+      myCon = myCon->lib_two;
+   }
+
+   printf("created one\n");
 }
 
 /*
@@ -90,20 +102,26 @@ void lwp_yield() {
  * LWPs, returns immediately.
  */
 void lwp_start() {
+   printf("lwp start\n");
 	if (!head) {
+      printf("return\n");
 		return;
-	}
-	context *threadToStart;
+   }
+   context *threadToStart;
 	threadToStart = schedulerState->next();
+
+   printf("threadtostart\n");
 
 	save_context(originalRegs);
 	load_context(&threadToStart->state);
 
 	current = threadToStart;
+   printf("setsp\n");
 
 	SetSP(current->stack + 1);
 
 	lwpfun functionToCall = (lwpfun) current->state.rsp;
+   printf("function call\n");
 	functionToCall((void *)current->state.rdi);
 }
 
@@ -161,15 +179,18 @@ thread tid2thread(tid_t tid) {
 
 
 void rr_admit(context *newContext) {
+   printf("admit\n");
    context *curr = rrHead;
    while (curr && curr->sched_two) {
       curr = curr->sched_two;
    }
 
    if (curr) {
+      printf("list not empty\n");
       curr->sched_two = newContext;
    }
    else {
+      printf("list empty\n");
       rrHead = newContext;
    }
 }
@@ -191,8 +212,10 @@ void rr_remove(context *victim) {
 }
 
 context *rr_next() {
+   printf("next\n");
    context *toReturn = rrHead;
    if (rrHead) {
+      printf("not null\n");
       rr_admit(toReturn);
       rrHead = rrHead->sched_two;
    }
