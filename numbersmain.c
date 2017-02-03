@@ -70,4 +70,3 @@ static void indentnum(uintptr_t num) {
                                  * been properly prepared
                                  */
 }
-

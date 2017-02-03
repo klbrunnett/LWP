@@ -21,8 +21,9 @@ static context *rrHead = NULL;
  * ir −1 if the thread cannot be created.
  */
 tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
-   printf("lwp_create\n");
-	context *myThread = malloc(sizeof(context) + stacksize + 2 * sizeof(unsigned long));
+	printf("entes\n");
+	context *myThread = malloc(sizeof(context) + stacksize 
+		+ 2 * sizeof(unsigned long));
 	if (!head) {
 		head = myThread;
 	}
@@ -48,6 +49,9 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
 	myThread->state.rbp = (unsigned long) myThread->stack - 1;
 	myThread->state.rsp = (unsigned long) myThread->stack + 1;
 
+	printf("using ours\n");
+
+	return myThread->tid;
 }
 
 /*
@@ -64,8 +68,21 @@ tid_t lwp_gettid(void) {
  * threads, restores the original system thread.
  */
 void lwp_exit() {
+	//might be wrong...
 	context *threadToFree = current;
 
+	schedulerState->remove(threadToFree);
+
+	free(threadToFree);
+
+	context *newThread = schedulerState->next();
+	if (newThread) {
+		current = newThread;
+		load_context(&newThread->state);
+	}
+	else {
+		load_context(originalRegs);
+	}
 }
 
 /*
@@ -116,6 +133,10 @@ void lwp_start() {
  */
 void lwp_stop() {
 	//destroy the schduler
+
+
+	load_context(originalRegs);
+	SetSP(originalRegs->rsp);
 }
 
 /*
