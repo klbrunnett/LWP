@@ -161,16 +161,10 @@ void lwp_start() {
    context *threadToStart;
    threadToStart = schedulerState->next();
 
-
    current = threadToStart;
-
-   unsigned long *sp = (unsigned long *)current->state.rsp;
-   lwpfun functionToCall = (lwpfun) *(sp);
 
    swap_rfiles(&originalRegs, NULL); //save
    swap_rfiles(NULL, &threadToStart->state); //load
-
-   // functionToCall((void *)current->state.rdi);
 }
 
 /*

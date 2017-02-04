@@ -69,4 +69,5 @@ static void indentnum(uintptr_t num) {
                                  * be unnecessary if the stack has
                                  * been properly prepared
                                  */
+  // printf("shouldnt be here\n");
 }
