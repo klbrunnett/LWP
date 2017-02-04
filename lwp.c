@@ -10,9 +10,10 @@ static tid_t tidCounter = 1;
 static context *head = NULL;
 static context *prev = NULL;
 static context *current = NULL;
-static struct scheduler rr_publish = {NULL, NULL, rr_admit, rr_remove, rr_next};
+static struct scheduler rr_publish = 
+{NULL, NULL, rr_admit, rr_remove, rr_next};
 static scheduler schedulerState = &rr_publish;
-static rfile *originalRegs = NULL;
+static rfile originalRegs;
 
 static context *rrHead = NULL;
 /*
@@ -23,7 +24,7 @@ static context *rrHead = NULL;
  * ir −1 if the thread cannot be created.
  */
 tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
-   printf("\nCREATE\n");
+   // printf("\nCREATE\n");
    context *myThread = malloc(sizeof(context));
    if (head == NULL) {
       head = myThread;
@@ -34,26 +35,14 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
    
    unsigned long *sp = myThread->stack + stacksize;
 
-   printf("thread %d: %p\n", myThread->tid, myThread);
-   printf("fuctionPtr: %p\n", function);
-   printf("stack: %p\n", sp);
-
-
-
-
    *(sp - 1) = (unsigned long) lwp_exit;
    *(sp - 2) = (unsigned long) function;
-
-   // printf("functionPtr:%p\n", *(sp - 2));
 
    myThread->state.rdi = (unsigned long) argument;
    myThread->state.rbp = (unsigned long) (sp - 3);
    myThread->state.rsp = (unsigned long) (sp - 3);
 
    myThread->state.fxsave=FPU_INIT;
-
-   printf("%p\n", (unsigned long*)myThread->state.rsp);
-
    
    myThread->lib_one = prev;
    myThread->lib_two = NULL;
@@ -65,16 +54,11 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
    prev = myThread;
 
    schedulerState->admit(myThread);
-   // rrPrintQueue();
-
-   printStackFrame(myThread);
-   rFilePrint(myThread);
 
    return myThread->tid;
 }
 
 void printStackFrame(context *currThread) {
-   printf("\n\nprinting thread %d: context %p's stack frame\n", currThread->tid, currThread);
    unsigned long *sp = currThread->stack + currThread->stacksize;
 
    int i;
@@ -82,8 +66,6 @@ void printStackFrame(context *currThread) {
       printf("%p: %p\n", sp, *sp);
       sp--;
    }
-
-   printf("end printing stack frame\n\n");
 }
 
 /*
@@ -97,15 +79,16 @@ tid_t lwp_gettid(void) {
 /*
  * Terminates the current LWP and frees its resources. Calls
  * sched->next() to get the next thread. If there are no other
+   printf("create");
  * threads, restores the original system thread.
  */
 void lwp_exit() {
-   printf("exit\n");
    //might be wrong...
    context *threadToFree = current;
 
    schedulerState->remove(threadToFree);
 
+   free(threadToFree->stack);
    free(threadToFree);
 
    context *newThread = schedulerState->next();
@@ -114,8 +97,7 @@ void lwp_exit() {
       swap_rfiles(NULL, &newThread->state); //load
    }
    else {
-      printf("done\n");
-      swap_rfiles(NULL, originalRegs); //load
+      lwp_stop();
    }
 }
 
@@ -125,7 +107,6 @@ void lwp_exit() {
  * that thread’s context, and returns.
  */
 void lwp_yield() {
-   printf("yeild\n");
    context *threadToStart;
 
    threadToStart = schedulerState->next();
@@ -148,7 +129,6 @@ void rrPrintQueue() {
 
 void rFilePrint(context *currThread) {
    printf("\n\nRegisters\n");
-   printf("thread %d: context %p's registers\n", currThread->tid, currThread);
    rfile *reg = &currThread->state;
    printf("rax: %lu\n", reg->rax);
    printf("rbx: %lu\n", reg->rbx);
@@ -175,8 +155,6 @@ void rFilePrint(context *currThread) {
  * LWPs, returns immediately.
  */
 void lwp_start() {
-   printf("\nSTART\n");
-
    if (!head) {
       return;
    }
@@ -185,26 +163,14 @@ void lwp_start() {
 
 
    current = threadToStart;
-   printContext(current);
 
-   printf("starting thread id: %d\n", current->tid);
-
-   unsigned long *sp = current->state.rsp;
+   unsigned long *sp = (unsigned long *)current->state.rsp;
    lwpfun functionToCall = (lwpfun) *(sp);
 
-   rFilePrint(current);
-   printStackFrame(current);
-
-
-   printf("before swap_rfiles\n");
-   swap_rfiles(originalRegs, NULL); //save
+   swap_rfiles(&originalRegs, NULL); //save
    swap_rfiles(NULL, &threadToStart->state); //load
-   printf("after swap_rfiles\n");
-
 
    functionToCall((void *)current->state.rdi);
-
-   printf("end start\n");
 }
 
 /*
@@ -217,10 +183,46 @@ void lwp_start() {
 void lwp_stop() {
    //destroy the schduler
 
-   printf("stop\n");
+   // SetSP((unsigned long *)originalRegs.rsp - 123);
 
-   swap_rfiles(NULL, originalRegs); //load
-   SetSP(originalRegs->rsp);
+   swap_rfiles(NULL, &originalRegs); //load
+   // asm("leaq 128(%rsi),%rax");
+   // printf("fxrstor\n");
+   // // asm("fxrstor (%rax)");
+   // printf("rax\n");
+   
+   // asm("movq    (%rsi),%rax");
+   // printf("rbx\n");
+   // asm("movq   8(%rsi),%rbx");
+   // printf("rcx\n");
+   // asm("movq  16(%rsi),%rcx");
+   // printf("rdx\n");
+   // asm("movq  24(%rsi),%rdx");
+   // printf("rdi\n");
+   // asm("movq  40(%rsi),%rdi");
+   // printf("rbp\n");
+   // asm("movq  48(%rsi),%rbp");
+   // printf("rsp\n");
+   // asm("movq  56(%rsi),%rsp");
+   // printf("r8\n");
+   // asm("movq  64(%rsi),%r8 ");
+   // printf("r9\n");
+   // asm("movq  72(%rsi),%r9 ");
+   // printf("r10\n");
+   // asm("movq  80(%rsi),%r10");
+   // printf("r11\n");
+   // asm("movq  88(%rsi),%r11");
+   // printf("r12\n");
+   // asm("movq  96(%rsi),%r12");
+   // printf("r13\n");
+   // asm("movq 104(%rsi),%r13");
+   // printf("r14\n");
+   // asm("movq 112(%rsi),%r14");
+   // printf("r15\n");
+   // asm("movq 120(%rsi),%r15");
+   // printf("rsi\n");
+   // asm("movq  32(%rsi),%rsi");
+   // printf("done\n");
 }
 
 /*
@@ -230,7 +232,7 @@ void lwp_stop() {
  * been set, the scheduler should do round-robin scheduling.
  */
 void lwp_set_scheduler(scheduler fun) {
-   printf("lwp_set_scheduler\n");
+   // printf("lwp_set_scheduler\n");
    context *curr;
    fun->init();
 
@@ -267,7 +269,6 @@ thread tid2thread(tid_t tid) {
 
 
 void rr_admit(context *newContext) {
-   printf("admit\n");
    context *curr = rrHead;
 
    while (curr && curr->sched_two) {
@@ -280,11 +281,9 @@ void rr_admit(context *newContext) {
    else {
       rrHead = newContext;
    }
-   printf("end admit\n");
 }
 
 void rr_remove(context *victim) {
-   printf("remove\n");
    context *toRemove = rrHead;
    context *prev = NULL;
    while (toRemove && toRemove != victim) {
@@ -292,11 +291,16 @@ void rr_remove(context *victim) {
       toRemove = toRemove->sched_two;
    }
 
-   if (prev && toRemove) {
-      prev->sched_two = toRemove->sched_two;
-      if (toRemove->sched_two) {
-         toRemove->sched_two->sched_one = prev;
+   if (prev) {
+      if (toRemove) {
+         prev->sched_two = toRemove->sched_two;
+         if (toRemove->sched_two) {
+            toRemove->sched_two->sched_one = prev;
+         }
       }
+   }
+   else {
+      rrHead = NULL;
    }
 }
 
@@ -307,17 +311,17 @@ void printContext(context *thisThread) {
 }
 
 context *rr_next() {
-   printf("next\n");
    context *toReturn = rrHead;
    if (toReturn) {
       rrHead = rrHead->sched_two;
-      rrHead->sched_one = NULL;
+      if (rrHead) {
+         rrHead->sched_one = NULL;
+      }
 
       toReturn->sched_one = NULL;
       toReturn->sched_two = NULL;
 
       rr_admit(toReturn);
    }
-   printContext(toReturn);
    return toReturn;
 }
