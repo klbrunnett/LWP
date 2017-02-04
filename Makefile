@@ -59,7 +59,7 @@ pub:
 	scp $(PUBFILES) $(TARGET)
 
 liblwp.so:	lwp.o
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ lwp.o
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ lwp.o magic64.S
 
 lwp.o: lwp.c lwp.h
 	$(CC) $(CFLAGS) -fPIC -c -o lwp.o lwp.c
