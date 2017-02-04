@@ -5,6 +5,7 @@
 void rr_remove(context *victim);
 void rr_admit(context *newContext);
 context *rr_next();
+void printStackFrame(context *currThread);
 
 static tid_t tidCounter = 1;
 static context *head = NULL;
@@ -15,6 +16,28 @@ static scheduler schedulerState = &rr_publish;
 static rfile *originalRegs = NULL;
 
 static context *rrHead = NULL;
+
+// void otherfunc();
+
+// int main(int argc, char const *argv[])
+// {
+//    otherfunc();
+//    return 0;
+// }
+
+// void otherfunc() {
+//    rfile *regs = malloc(sizeof(rfile));
+//    save_context(regs);
+//    printf("rsp in other: %p\n", regs->rsp);
+//    printf("rbp in other: %p\n", regs->rbp);
+//    printf("regs in other: %p\n", &regs);
+//    unsigned long *tmp = (unsigned long *)regs->rsp;
+//    int i;
+//    for (i = 0; i < 30; i++) {
+//       printf("%p: %p\tmain: %p\totherfunc: %p\n", tmp, *tmp, main, otherfunc);
+//       tmp++;
+//    }
+// }
 /*
  * Creates a new lightweight process which executes the given function
  * with the given argument. The new processes’s stack will be
@@ -34,26 +57,14 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
    
    unsigned long *sp = myThread->stack + stacksize;
 
-   printf("thread: %p\n", myThread);
-   printf("fuctionPtr: %p\n", function);
-   printf("stack: %p\n", sp);
-
-
-
-
-   *(sp - 1) = (unsigned long) argument;
-   *(sp - 2) = (unsigned long) lwp_exit;
-   *(sp - 3) = (unsigned long) function;
-
-   printf("functionPtr:%p\n", *(sp-3));
+   printf("top of stack %p\n", (unsigned long) sp);
+   *(sp - 1) = (unsigned long) lwp_exit;
+   *(sp - 2) = (unsigned long) function;
 
    myThread->state.rdi = (unsigned long) argument;
-   myThread->state.rbp = (unsigned long) sp;
-   myThread->state.rsp = (unsigned long) sp - 3;
+   myThread->state.rbp = (unsigned long) (sp - 2);
+   myThread->state.rsp = (unsigned long) (sp - 2);
 
-   printf("%p\n", (unsigned long*)myThread->state.rsp);
-
-   
    myThread->lib_one = prev;
    myThread->lib_two = NULL;
 
@@ -64,7 +75,6 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
    prev = myThread;
 
    schedulerState->admit(myThread);
-   // rrPrintQueue();
 
    printStackFrame(myThread);
 
@@ -77,7 +87,8 @@ void printStackFrame(context *currThread) {
 
    int i;
    for(i = 0; i < 10; i++) {
-      printf("%p\n", *sp--);
+      printf("%p: %lu\n", sp, *sp);
+      sp--;
    }
 
    printf("end printing stack frame\n");
@@ -171,20 +182,24 @@ void rFilePrint(rfile *reg) {
 void lwp_start() {
    printf("start\n");
 
-   rrPrintQueue();
-
    if (!head) {
       return;
    }
    context *threadToStart;
    threadToStart = schedulerState->next();
 
-   printf("before swap_rfiles\n");
+   printf("sp: %d\n", threadToStart->state.rsp);
+   printf("bp: %d\n", threadToStart->state.rbp);
+   printStackFrame(threadToStart);
 
-   // swap_rfiles(originalRegs, NULL); //save
-   // rFilePrint(&threadToStart->state);
+   swap_rfiles(originalRegs, NULL); //save
+   rFilePrint(&threadToStart->state);
+   printf("whats at rsp? %p: %d\n", threadToStart->state.rsp, *((unsigned long *)threadToStart->state.rsp));
+   printf("whats at rbp? %p: %d\n", threadToStart->state.rbp, *((unsigned long *)threadToStart->state.rbp));
 
-   // swap_rfiles(NULL, &threadToStart->state); //load
+   printf("state: %p\n", &threadToStart->state);
+
+   swap_rfiles(NULL, &threadToStart->state); //load
 
    printf("after swap_rfiles\n");
 
@@ -193,7 +208,7 @@ void lwp_start() {
    // SetSP(current->stack - 1);
    printf("%p\n", current);
    rFilePrint(&current->state);
-   unsigned long *sp = current->state.rsp;
+   unsigned long *sp = (unsigned long *)current->state.rsp;
    printf("sp: %p\n", sp);
    lwpfun functionToCall = (lwpfun) *(sp-3);
 
