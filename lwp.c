@@ -58,7 +58,7 @@ tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
    return myThread->tid;
 }
 
-void printStackFrame(context *currThread) {
+/*void printStackFrame(context *currThread) {
    unsigned long *sp = currThread->stack + currThread->stacksize;
 
    int i;
@@ -66,7 +66,7 @@ void printStackFrame(context *currThread) {
       printf("%p: %p\n", sp, *sp);
       sp--;
    }
-}
+}*/
 
 /*
  * Returns the tid of the calling LWP or NO THREAD if not called by a
@@ -117,7 +117,7 @@ void lwp_yield() {
 
 }
 
-void rrPrintQueue() {
+/*void rrPrintQueue() {
    printf("\n\nprinting rr queue\n");
    context *curr = rrHead;
    while (curr) {
@@ -125,9 +125,9 @@ void rrPrintQueue() {
       curr = curr->sched_two;
    }
    printf("end rr queue\n\n");
-}
+}*/
 
-void rFilePrint(context *currThread) {
+/*void rFilePrint(context *currThread) {
    printf("\n\nRegisters\n");
    rfile *reg = &currThread->state;
    printf("rax: %lu\n", reg->rax);
@@ -148,7 +148,7 @@ void rFilePrint(context *currThread) {
    printf("r13: %lu\n", reg->r13);
    printf("r14: %lu\n", reg->r14);
    printf("r15: %lu\n", reg->r15);
-}
+}*/
 /* 
  * Starts the LWP system. Saves the original context (for lwp stop()
  * to use later), picks a LWP and starts it running. If there are no
@@ -170,7 +170,7 @@ void lwp_start() {
    swap_rfiles(&originalRegs, NULL); //save
    swap_rfiles(NULL, &threadToStart->state); //load
 
-   functionToCall((void *)current->state.rdi);
+   // functionToCall((void *)current->state.rdi);
 }
 
 /*
