@@ -77,7 +77,7 @@ void printStackFrame(context *currThread) {
 
    int i;
    for(i = 0; i < 10; i++) {
-      printf("%lu\n", *sp++);
+      printf("%p\n", *sp--);
    }
 
    printf("end printing stack frame\n");
