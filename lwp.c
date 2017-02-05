@@ -6,8 +6,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "semsCopy.h"
-
 void rr_remove(context *victim);
 void rr_admit(context *newContext);
 context *rr_next();
@@ -261,10 +259,11 @@ scheduler lwp_get_scheduler() {
 
 thread tid2thread(tid_t tid) {
    context *curr = head;
-   while (!curr) {
+   while (curr) {
       if (curr->tid == tid) {
          return curr;
       }
+      curr = curr->lib_two;
    }
    return NULL;
 }
