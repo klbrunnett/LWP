@@ -6,20 +6,20 @@
 #include <string.h>
 #include <unistd.h>
 
-void rr_remove(context *victim);
-void rr_admit(context *newContext);
-context *rr_next();
+void rr_remove(thread victim);
+void rr_admit(thread newContext);
+thread rr_next();
 
 static tid_t tidCounter = 1;
-static context *head = NULL;
-static context *prev = NULL;
-static context *current = NULL;
+static thread head = NULL;
+static thread prev = NULL;
+static thread current = NULL;
 static struct scheduler rr_publish = 
 {NULL, NULL, rr_admit, rr_remove, rr_next};
 static scheduler schedulerState = &rr_publish;
 static rfile originalRegs;
 
-static context *rrHead = NULL;
+static thread rrHead = NULL;
 
 /*
  * Creates a new lightweight process which executes the given function
@@ -29,34 +29,40 @@ static context *rrHead = NULL;
  * ir −1 if the thread cannot be created.
  */
 tid_t lwp_create(lwpfun function, void *argument, size_t stacksize) {
-   context *myThread = malloc(sizeof(context));
+   thread myThread = malloc(sizeof(context));
+   
+   // if the thread linked list is empty, initialize it
    if (head == NULL) {
       head = myThread;
    }
-   myThread->tid = tidCounter++;
+   myThread->tid = tidCounter++;    // number new threads in order
    myThread->stacksize = stacksize;
    myThread->stack = malloc(stacksize * sizeof(unsigned long));
    
+   // write to the stack top-down (decreasing address)
    unsigned long *sp = myThread->stack + stacksize;
 
-   *(sp - 1) = (unsigned long) lwp_exit;
-   *(sp - 2) = (unsigned long) function;
+   *(--sp) = (unsigned long) lwp_exit;    // push return address
+   *(--sp) = (unsigned long) function;    // push the thread's function
 
+   // gcc calling convention (rdi = arg, align rbp, rsp)
    myThread->state.rdi = (unsigned long) argument;
-   myThread->state.rbp = (unsigned long) (sp - 3);
-   myThread->state.rsp = (unsigned long) (sp - 3);
+   myThread->state.rbp = (unsigned long) --sp;
+   myThread->state.rsp = (unsigned long) sp;
 
-   myThread->state.fxsave=FPU_INIT;
+   myThread->state.fxsave=FPU_INIT;    // initialize floating point state
    
+   // lib_one: prev, lib_two: next
    myThread->lib_one = prev;
    myThread->lib_two = NULL;
 
+   // maintain the linked list of threads
    if (prev) {
       prev->lib_two = myThread;
    }
 
    prev = myThread;
-   schedulerState->admit(myThread);
+   schedulerState->admit(myThread);    // add the new thread to the scheduler
 
    return myThread->tid;
 }
@@ -73,22 +79,31 @@ tid_t lwp_gettid(void) {
 /*
  * Terminates the current LWP and frees its resources. Calls
  * sched->next() to get the next thread. If there are no other
-   printf("create");
  * threads, restores the original system thread.
  */
 void lwp_exit() {
-   context *threadToFree = current;
+   thread threadToFree = current;
 
+   // if the last thread is exiting, move the prev pointer
+   if (threadToFree == prev) {
+      prev = threadToFree->lib_one;
+   }
+
+   // remove the thread to the scheduler
    schedulerState->remove(threadToFree);
-   context *newThread = schedulerState->next();
 
-   if (newThread) {
+   // get the new thread from the scheduler
+   thread newThread = schedulerState->next();
+
+   if (newThread) {     // if there are more threads, start the next one
       current = newThread;
-      swap_rfiles(NULL, &newThread->state); //load
+      swap_rfiles(NULL, &newThread->state);  // load the new thread's context
+      
+      // free the old thread's resources
       free(threadToFree->stack);
       free(threadToFree);
    }
-   else {
+   else {               // otherwise stop lwp
       lwp_stop();
    }
 }
@@ -99,16 +114,14 @@ void lwp_exit() {
  * that thread’s context, and returns.
  */
 void lwp_yield() {
-   context *threadToStart;
+   thread threadToStart = schedulerState->next();  // get the next thread
 
-   threadToStart = schedulerState->next();
-
-   if (threadToStart) {
-      swap_rfiles(&current->state, NULL); //save
+   if (threadToStart) {    // if there is a thread, start it
+      swap_rfiles(&current->state, NULL);    // save the last thread's state
       current = threadToStart;
-      swap_rfiles(NULL, &threadToStart->state); //load
+      swap_rfiles(NULL, &threadToStart->state); // load the new thread's state
    }
-   else {
+   else {   // otherwise stop lwp
       lwp_stop();  
    }
 }
@@ -119,16 +132,14 @@ void lwp_yield() {
  * LWPs, returns immediately.
  */
 void lwp_start() {
-   if (!head) {
+   if (!head) {   // if there are no threads, return
       return;
    }
-   context *threadToStart;
-   threadToStart = schedulerState->next();
 
-   current = threadToStart;
+   current = schedulerState->next();   // start the first thread
 
-   if (current) {
-      swap_rfiles(&originalRegs,  &current->state); //load  
+   if (current) {    // if there is a thread, load its context
+      swap_rfiles(&originalRegs,  &current->state);  
    }
 }
 
@@ -140,7 +151,8 @@ void lwp_start() {
  * processing will be restarted by a call to lwp start().
  */
 void lwp_stop() {
-   swap_rfiles(&current->state, &originalRegs); //load
+   // load the original caller's context
+   swap_rfiles(&current->state, &originalRegs);
 }
 
 /*
@@ -150,17 +162,20 @@ void lwp_stop() {
  * been set, the scheduler should do round-robin scheduling.
  */
 void lwp_set_scheduler(scheduler fun) {
-   context *curr;
+   thread curr;
 
+   // if the scheduler has an init function, call it
    if (fun->init) {
       fun->init();
    }
 
+   // move threads from old scheduler to the new one
    while (curr = schedulerState->next()) {
       schedulerState->remove(curr);
       fun->admit(curr);
    }
 
+   // if the scheduler has a shutdown, call it
    if (schedulerState->shutdown) {
       schedulerState->shutdown();
    }
@@ -181,19 +196,27 @@ scheduler lwp_get_scheduler() {
  */
 
 thread tid2thread(tid_t tid) {
-   context *curr = head;
+   thread curr = head;
+
+   // look for the thread in the linked list
    while (curr) {
       if (curr->tid == tid) {
-         return curr;
+         return curr;            // found it!
       }
       curr = curr->lib_two;
    }
+
+   // we didn't find it :(
    return NULL;
 }
 
+// --- Round Robin Scheduler functions ---
 
-void rr_admit(context *newContext) {
-   context *curr = rrHead;
+/*
+ *  Adds a new thread to the end of the list of threads
+ */
+void rr_admit(thread newContext) {
+   thread curr = rrHead;
 
    while (curr && curr->sched_two) {
       curr = curr->sched_two;
@@ -207,45 +230,53 @@ void rr_admit(context *newContext) {
    }
 }
 
+/*
+ *  Removes a thread from the list of threads by its address.
+ */
 void rr_remove(context *victim) {
    context *toRemove = rrHead;
    context *prev = NULL;
 
+   // traverse the list, looking for the victim
    while (toRemove && toRemove != victim) {
       prev = toRemove;
       toRemove = toRemove->sched_two;
    }
 
-   if (prev) {
-      if (toRemove) {
-         prev->sched_two = toRemove->sched_two;
-         if (toRemove->sched_two) {
-            toRemove->sched_two->sched_one = prev;
-         }
+   // if it wasn't the first one, restore the previous thread's 'next'
+   if (prev && toRemove) {
+
+      // we found the thread, fix up the linked list
+      prev->sched_two = toRemove->sched_two;
+      if (toRemove->sched_two) {
+         toRemove->sched_two->sched_one = prev;
       }
    }
-   else if (rrHead == victim) {
-      if (rrHead->sched_two) {
-         rrHead = rrHead->sched_two;
-         rrHead->sched_one = NULL;
-      }
-      else {
-         rrHead = NULL;
-      }
+   else if (rrHead == victim && rrHead->sched_two) {
+      // the thread is the first of multiple threads
+      rrHead = rrHead->sched_two;
+      rrHead->sched_one = NULL;
    }
    else {
+      // didn't find the thread
       rrHead = NULL;
    }
 }
 
-context *rr_next() {
-   context *toReturn = rrHead;
-   if (toReturn) {
+
+/*
+ *  Gets the next thread in the list
+ */
+thread rr_next() {
+   thread toReturn = rrHead;
+   if (toReturn) {      // if there is a thread to run
+      // get the new head, and set up it's pointers
       rrHead = rrHead->sched_two;
       if (rrHead) {
          rrHead->sched_one = NULL;
       }
 
+      // remove the thread from the list and re-admit it
       toReturn->sched_one = NULL;
       toReturn->sched_two = NULL;
 
