@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "semsCopy.h"
+
 void rr_remove(context *victim);
 void rr_admit(context *newContext);
 context *rr_next();
@@ -16,6 +22,7 @@ static scheduler schedulerState = &rr_publish;
 static rfile originalRegs;
 
 static context *rrHead = NULL;
+
 /*
  * Creates a new lightweight process which executes the given function
  * with the given argument. The new processes’s stack will be
@@ -87,14 +94,13 @@ void lwp_exit() {
    context *threadToFree = current;
 
    schedulerState->remove(threadToFree);
-
-   free(threadToFree->stack);
-   free(threadToFree);
-
    context *newThread = schedulerState->next();
+
    if (newThread) {
       current = newThread;
       swap_rfiles(NULL, &newThread->state); //load
+      free(threadToFree->stack);
+      free(threadToFree);
    }
    else {
       lwp_stop();
@@ -111,10 +117,14 @@ void lwp_yield() {
 
    threadToStart = schedulerState->next();
 
-   swap_rfiles(&current->state, NULL); //save
-   current = threadToStart;
-   swap_rfiles(NULL, &current->state); //load
-
+   if (threadToStart) {
+      swap_rfiles(&current->state, NULL); //save
+      current = threadToStart;
+      swap_rfiles(NULL, &threadToStart->state); //load
+   }
+   else {
+      lwp_stop();  
+   }
 }
 
 /*void rrPrintQueue() {
@@ -163,8 +173,9 @@ void lwp_start() {
 
    current = threadToStart;
 
-   swap_rfiles(&originalRegs, NULL); //save
-   swap_rfiles(NULL, &threadToStart->state); //load
+   if (current) {
+      swap_rfiles(&originalRegs,  &current->state); //load  
+   }
 }
 
 /*
@@ -179,7 +190,7 @@ void lwp_stop() {
 
    // SetSP((unsigned long *)originalRegs.rsp - 123);
 
-   swap_rfiles(NULL, &originalRegs); //load
+   swap_rfiles(&current->state, &originalRegs); //load
    // asm("leaq 128(%rsi),%rax");
    // printf("fxrstor\n");
    // // asm("fxrstor (%rax)");
@@ -226,15 +237,12 @@ void lwp_stop() {
  * been set, the scheduler should do round-robin scheduling.
  */
 void lwp_set_scheduler(scheduler fun) {
-   // printf("lwp_set_scheduler\n");
    context *curr;
-   fun->init();
 
-   while (!(curr = schedulerState->next())) {
+   while (curr = schedulerState->next()) {
       schedulerState->remove(curr);
       fun->admit(curr);
    }
-   schedulerState->shutdown();
 
    schedulerState = fun;
 }
@@ -280,6 +288,7 @@ void rr_admit(context *newContext) {
 void rr_remove(context *victim) {
    context *toRemove = rrHead;
    context *prev = NULL;
+   
    while (toRemove && toRemove != victim) {
       prev = toRemove;
       toRemove = toRemove->sched_two;
@@ -293,16 +302,25 @@ void rr_remove(context *victim) {
          }
       }
    }
+   else if (rrHead == victim) {
+      if (rrHead->sched_two) {
+         rrHead = rrHead->sched_two;
+         rrHead->sched_one = NULL;
+      }
+      else {
+         rrHead = NULL;
+      }
+   }
    else {
       rrHead = NULL;
    }
 }
 
-void printContext(context *thisThread) {
-   printf("\n\nthread info\n");
-   printf("thread id: %d\n", thisThread->tid);
-   printf("end thread info\n\n");
-}
+// void printContext(context *thisThread) {
+//    printf("\n\nthread info\n");
+//    printf("thread id: %d\n", thisThread->tid);
+//    printf("end thread info\n\n");
+// }
 
 context *rr_next() {
    context *toReturn = rrHead;
