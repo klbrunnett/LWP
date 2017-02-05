@@ -235,12 +235,22 @@ void lwp_stop() {
  * been set, the scheduler should do round-robin scheduling.
  */
 void lwp_set_scheduler(scheduler fun) {
+   // context *curr; 
+
+   // while (curr = schedulerState->next()) {
+   //    schedulerState->remove(curr);
+   //    fun->admit(curr);
+   // }
+
+   // schedulerState = fun;
    context *curr;
+   fun->init();
 
    while (curr = schedulerState->next()) {
       schedulerState->remove(curr);
       fun->admit(curr);
    }
+   schedulerState->shutdown();
 
    schedulerState = fun;
 }
@@ -287,7 +297,7 @@ void rr_admit(context *newContext) {
 void rr_remove(context *victim) {
    context *toRemove = rrHead;
    context *prev = NULL;
-   
+
    while (toRemove && toRemove != victim) {
       prev = toRemove;
       toRemove = toRemove->sched_two;

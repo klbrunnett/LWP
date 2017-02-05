@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <lwp.h>
+#include "lwp.h"
 #include <sems.h>
 
 #define STACKSIZE   (8192*16)
